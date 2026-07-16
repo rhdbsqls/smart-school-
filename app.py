@@ -20,7 +20,7 @@ if not os.path.exists(MODEL_PATH):
 
     try:
         # 구글 드라이브 대용량 파일 다운로드 (gdown 활용)
-        gdown.download(url, output, quiet=False, remaining_ok=True)
+        gdown.download(url, output, quiet=False)
 
         # 다운로드받은 zip 파일 압축 해제
         print("📦 다운로드 완료. 압축을 해제합니다...")
