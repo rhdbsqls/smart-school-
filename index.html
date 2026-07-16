@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 교무실 방문 예약 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 flex items-center justify-center min-h-screen p-4">
+
+    <div id="intro-step" class="w-full max-w-lg bg-white rounded-3xl shadow-xl border border-gray-100 p-10 text-center transition-all duration-300 transform scale-100">
+        <div class="space-y-6">
+            <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight leading-snug">
+                🏫 스마트 교무실 <br>방문 예약 시스템
+            </h1>
+            <p class="text-gray-500 font-medium text-base">
+                편리하게 교무실을 이용해보세요
+            </p>
+
+            <button onclick="goNextStep()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-200 transition-all duration-200 text-lg">
+                시스템 들어가기
+            </button>
+        </div>
+    </div>
+
+    <div id="role-step" class="w-full max-w-lg bg-slate-50 rounded-3xl p-6 text-center hidden transition-all duration-300 transform scale-95 opacity-0">
+        <h2 class="text-xl font-bold text-slate-800 mb-8">본인의 신분을 선택해 주세요</h2>
+
+        <div class="space-y-6">
+            <div class="bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden">
+                <div class="p-8 flex flex-col items-center justify-center">
+                    <span class="text-5xl mb-3">👩‍🏫</span>
+                    <span class="text-xl font-bold text-slate-800">교직원</span>
+                </div>
+                <button onclick="goToPage('teacher')" class="w-full bg-blue-600 hover:bg-blue-750 text-white font-semibold py-3.5 transition">
+                    로그인 ›
+                </button>
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-md border border-gray-100 overflow-hidden">
+                <div class="p-8 flex flex-col items-center justify-center">
+                    <span class="text-5xl mb-3">🎓</span>
+                    <span class="text-xl font-bold text-slate-800">학생</span>
+                </div>
+                <button onclick="goToPage('student')" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3.5 transition">
+                    로그인 ›
+                </button>
+            </div>
+
+            <button onclick="goBackStep()" class="w-full bg-gray-300 hover:bg-gray-400 text-slate-700 font-semibold py-3.5 rounded-2xl transition mt-4">
+                이전으로 돌아가기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 화면 전환 효과 함수
+        function goNextStep() {
+            const intro = document.getElementById('intro-step');
+            const role = document.getElementById('role-step');
+
+            intro.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                intro.classList.add('hidden');
+                role.classList.remove('hidden');
+                // 약간의 시간차를 주어 자연스러운 페이드인 효과를 줍니다.
+                setTimeout(() => {
+                    role.classList.remove('scale-95', 'opacity-0');
+                    role.classList.add('scale-100', 'opacity-100');
+                }, 50);
+            }, 300);
+        }
+
+        function goBackStep() {
+            const intro = document.getElementById('intro-step');
+            const role = document.getElementById('role-step');
+
+            role.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                role.classList.add('hidden');
+                intro.classList.remove('hidden');
+                setTimeout(() => {
+                    intro.classList.remove('scale-95', 'opacity-0');
+                    intro.classList.add('scale-100', 'opacity-100');
+                }, 50);
+            }, 300);
+        }
+
+        function goToPage(role) {
+            if (role === 'student') {
+                window.location.href = '/student';
+            } else if (role === 'teacher') {
+                window.location.href = '/teacher';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>스마트 교무실 방문 시스템 - 학생용</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC4arfE-nLP8EYVk-SG2UDbGDmS9LNDONg",
+            authDomain: "smart-school-office-f363d.firebaseapp.com",
+            projectId: "smart-school-office-f363d",
+            storageBucket: "smart-school-office-f363d.firebasestorage.app",
+            messagingSenderId: "865154285976",
+            appId: "1:865154285976:web:1536e5af340f1cf653ebed"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        // 2. [추가] 메시징 인스턴스 초기화
+        const messaging = firebase.messaging();
+    </script>
+
+    <div id="student-login-overlay" class="fixed inset-0 bg-indigo-900 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full mx-4">
+            <h2 class="text-2xl font-bold text-indigo-900 mb-2 text-center font-sans">🎓 학생 로그인</h2>
+            <p class="text-xs text-gray-500 text-center mb-6">스마트 교무실 방문 예약 시스템</p>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">학번 (5자리)</label>
+                    <input id="login-student-num" type="text" placeholder="예: 20101" class="w-full p-3 border rounded text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-800">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">비밀번호</label>
+                    <input id="login-student-pw" type="password" placeholder="비밀번호 입력" class="w-full p-3 border rounded text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-800">
+                </div>
+                <button onclick="studentSimpleLogin()" class="w-full bg-indigo-800 hover:bg-indigo-700 text-white font-bold py-3 rounded transition text-sm">
+                    인증 및 로그인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-64 bg-indigo-900 text-white flex flex-col justify-between">
+        <div>
+            <div class="p-6 text-2xl font-bold tracking-wider border-b border-indigo-800 flex items-center gap-2">
+                🎓 학생 포털
+            </div>
+            <nav class="mt-6 px-4 space-y-2">
+                <button onclick="switchTab('booking-tab')" class="tab-btn w-full text-left py-2 px-4 rounded bg-indigo-800 hover:bg-indigo-700 transition">방문 예약 신청</button>
+                <button onclick="switchTab('my-status-tab')" class="tab-btn w-full flex items-center justify-between py-2 px-4 rounded hover:bg-indigo-700 transition">
+                    <span>내 신청/호출 현황</span>
+                    <span id="call-badge" class="hidden bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-bounce">0</span>
+                </button>
+            </nav>
+        </div>
+
+        <div class="p-6 border-t border-indigo-800">
+            <p class="text-xs text-indigo-300" id="student-num-info">학번 정보</p>
+            <div class="flex items-center justify-between mt-1">
+                <span class="font-bold text-lg" id="student-name">로그인 필요</span>
+                <button id="pw-change-btn" onclick="openPwModal()" class="hidden text-indigo-300 hover:text-white p-1 rounded transition hover:bg-indigo-800" title="비밀번호 변경">
+                    ⚙️
+                </button>
+            </div>
+            <button onclick="logout()" class="mt-4 w-full bg-indigo-700 hover:bg-indigo-600 py-1 rounded text-xs transition">로그아웃</button>
+        </div>
+    </div>
+
+    <div class="flex-1 flex flex-col overflow-y-auto">
+        <header class="bg-white shadow-sm px-8 py-4">
+            <h2 class="text-xl font-bold text-gray-800" id="tab-title">방문 예약 신청</h2>
+        </header>
+
+        <main class="p-8 flex-1">
+            <div id="booking-tab" class="tab-content block space-y-6">
+                <div class="bg-white rounded-lg shadow p-6 max-w-xl">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">📅 선생님 방문 예약하기</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">선생님 목록</label>
+                            <select id="booking-teacher" class="w-full p-2 border rounded focus:ring focus:ring-indigo-300">
+                                <option value="">선생님 목록을 불러오는 중...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">방문 희망 시간</label>
+                            <select id="booking-time" class="w-full p-2 border rounded focus:ring focus:ring-indigo-300">
+                                <option value="점심시간 (12:30 ~ 13:30)">점심시간 (12:30 ~ 13:30)</option>
+                                <option value="방과후 (16:30 ~ 17:30)">방과후 (16:30 ~ 17:30)</option>
+                                <option value="1교시 쉬는시간">1교시 쉬는시간 </option>
+                                <option value="2교시 쉬는시간">2교시 쉬는시간 </option>
+                                <option value="3교시 쉬는시간">3교시 쉬는시간 </option>
+                                <option value="5교시 쉬는시간">5교시 쉬는시간 </option>
+                                <option value="6교시 쉬는시간">6교시 쉬는시간 </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">카테고리</label>
+                            <select id="booking-category" class="w-full p-2 border rounded focus:ring focus:ring-indigo-300">
+                                <option value="진로 및 진학 상담">상담</option>
+                                <option value="수행평가 피드백">평가 관련 문의</option>
+                                <option value="교과 질문">교과 질문</option>
+                                <option value="교과 질문">생기부</option>
+                                <option value="교과 질문">학습지</option>
+                                <option value="기타 방문">기타</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-1">상세 내용 (메모)</label>
+                            <textarea id="booking-detail" rows="4" class="w-full p-2 border rounded focus:ring focus:ring-indigo-300 text-sm" placeholder="선생님께 전달할 구체적인 내용이나 질문 요지를 적어주세요."></textarea>
+                        </div>
+                        <button id="btn-submit-appointment" onclick="submitAppointment()" class="w-full bg-indigo-800 hover:bg-indigo-700 text-white font-bold py-3 rounded transition text-sm">
+                            방문 신청 전송 📤
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="my-status-tab" class="tab-content hidden space-y-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">🔔 실시간 선생님의 나 호출 정보</h3>
+                    <div class="overflow-hidden border rounded-lg">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 text-gray-700 border-b">
+                                    <th class="p-3 font-semibold">호출 선생님</th>
+                                    <th class="p-3 font-semibold">지정 시간 및 메모</th>
+                                    <th class="p-3 font-semibold">등록 일시</th>
+                                    <th class="p-3 font-semibold">상태</th>
+                                    <th class="p-3 font-semibold text-center">확인 동작</th>
+                                </tr>
+                            </thead>
+                            <tbody id="my-call-list" class="divide-y text-gray-600">
+                                <tr>
+                                    <td colspan="5" class="p-4 text-center text-gray-400">데이터를 가져오는 중입니다...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">📅 내가 신청한 예약 목록 현황</h3>
+                    <div class="overflow-hidden border rounded-lg">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 text-gray-700 border-b">
+                                    <th class="p-3 font-semibold">예약 선생님</th>
+                                    <th class="p-3 font-semibold">희망 시간</th>
+                                    <th class="p-3 font-semibold">신청 일시</th>
+                                    <th class="p-3 font-semibold">상태</th>
+                                    <th class="p-3 font-semibold">선생님의 안내/피드백 메모</th>
+                                </tr>
+                            </thead>
+                            <tbody id="my-appointment-list" class="divide-y text-gray-600">
+                                <tr>
+                                    <td colspan="5" class="p-4 text-center text-gray-400">데이터를 가져오는 중입니다...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="pw-change-modal" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg max-w-sm w-full p-6 shadow-2xl mx-4">
+            <h3 class="text-lg font-bold text-indigo-900 border-b pb-3 mb-4">⚙️ 비밀번호 변경</h3>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">현재 비밀번호</label>
+                    <input id="current-pw" type="password" placeholder="기존 비밀번호 입력" class="w-full p-2.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-800">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">새 비밀번호</label>
+                    <input id="new-pw" type="password" placeholder="새 비밀번호 입력" class="w-full p-2.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-800">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">새 비밀번호 확인</label>
+                    <input id="new-pw-confirm" type="password" placeholder="새 비밀번호 한번 더 입력" class="w-full p-2.5 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-800">
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-2">
+                <button onclick="closePwModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded text-sm transition">취소</button>
+                <button onclick="submitNewPassword()" class="px-4 py-2 bg-indigo-800 hover:bg-indigo-700 text-white font-semibold rounded text-sm transition">변경하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let myStudentNum = null;
+        let myStudentName = null;
+        let myStudentEmail = null;
+
+        let myCallUnsubscribe = null;
+        let myAppointmentUnsubscribe = null;
+
+        let prevUnconfirmedCount = 0;
+        let lastKnownStatusMap = {}; // 이전 승인 상태 저장용 딕셔너리
+
+        // 중복 제출 방지용 플래그 변수 추가
+        let isSubmittingAppointment = false;
+
+        // Firebase Timestamp를 보기 편한 문자열(YYYY. MM. DD. HH:MM)로 포맷팅하는 함수 추가
+        function formatFirebaseTimestamp(timestamp) {
+            if (!timestamp) return "-";
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}. ${month}. ${day} ${hours}:${minutes}`;
+        }
+
+        function playNotificationSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime + 0.5);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+            } catch (e) {
+                console.log("알림 오작동 방지", e);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            if (window.Notification && Notification.permission !== "granted") {
+                Notification.requestPermission();
+            }
+
+            await loadTeachersFromFirebase();
+
+            const savedStudentNum = sessionStorage.getItem('studentNum');
+            if (savedStudentNum) {
+                myStudentNum = savedStudentNum;
+                myStudentName = sessionStorage.getItem('studentName');
+                myStudentEmail = sessionStorage.getItem('studentEmail');
+
+                document.getElementById('student-login-overlay').classList.add('hidden');
+                setupStudentProfile();
+                startRealtimeListeners();
+
+                // 3. [추가] 자동 로그인 사용자 푸시 권한 연동
+                requestPushPermission(myStudentNum);
+            }
+        });
+
+        // 4. [추가] 브라우저 알림 권한 및 FCM 기기 토큰 획득 요청 함수
+        function requestPushPermission(studentNum) {
+            if (!window.Notification) return;
+
+            Notification.requestPermission().then((permission) => {
+                if (permission === 'granted') {
+                    console.log('푸시 알림 권한 획득 성공!');
+
+                    // 기기 고유 토큰 요청 (VAPID 키는 Firebase 메시징 설정 시 발급받아 대체해 사용하세요)
+                    messaging.getToken({ vapidKey: 'YOUR_PUBLIC_VAPID_KEY_HERE' })
+                    .then((currentToken) => {
+                        if (currentToken) {
+                            console.log('FCM 기기 토큰 발급 완료:', currentToken);
+                            // 수신한 고유 토큰값을 학생 Firestore 문서에 업데이트하여 백그라운드 푸시 준비를 마칩니다.
+                            db.collection('students').doc(studentNum).update({
+                                fcmToken: currentToken
+                            }).catch(err => console.log('토큰 저장 에러:', err));
+                        }
+                    }).catch((err) => {
+                        console.log('토큰 획득 과정 오류:', err);
+                    });
+                }
+            });
+        }
+
+        async function loadTeachersFromFirebase() {
+            const selectEl = document.getElementById('booking-teacher');
+            try {
+                const snapshot = await db.collection('teachers').get();
+                if (snapshot.empty) {
+                    selectEl.innerHTML = '<option value="">등록된 선생님이 없습니다.</option>';
+                    return;
+                }
+
+                let html = '<option value="">-- 방문할 선생님을 선택하세요 --</option>';
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const tName = data.name || doc.id;
+                    const subject = data.subject ? ` (${data.subject})` : '';
+                    const office = data.office ? ` - ${data.office}` : '';
+
+                    html += `<option value="${tName}">${tName} 선생님${subject}${office}</option>`;
+                });
+                selectEl.innerHTML = html;
+            } catch (error) {
+                selectEl.innerHTML = '<option value="">선생님 목록 로드 실패</option>';
+            }
+        }
+
+        function startRealtimeListeners() {
+            if (myCallUnsubscribe) myCallUnsubscribe();
+            if (myAppointmentUnsubscribe) myAppointmentUnsubscribe();
+
+            listenToMyCalls();
+            listenToMyAppointments();
+        }
+
+        async function studentSimpleLogin() {
+            const sNum = document.getElementById('login-student-num').value.trim();
+            const sPw = document.getElementById('login-student-pw').value.trim();
+
+            if (!sNum || !sPw) {
+                alert("학번과 비밀번호를 모두 입력해 주세요!");
+                return;
+            }
+
+            try {
+                const docRef = db.collection('students').doc(sNum);
+                const doc = await docRef.get();
+
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.password === sPw) {
+                        myStudentNum = data.studentNum;
+                        myStudentName = data.name;
+                        myStudentEmail = data.email;
+
+                        sessionStorage.setItem('studentNum', myStudentNum);
+                        sessionStorage.setItem('studentName', myStudentName);
+                        sessionStorage.setItem('studentEmail', myStudentEmail);
+
+                        document.getElementById('login-student-num').value = "";
+                        document.getElementById('login-student-pw').value = "";
+                        document.getElementById('student-login-overlay').classList.add('hidden');
+
+                        setupStudentProfile();
+                        startRealtimeListeners();
+
+                        // 5. [추가] 로그인 완료 시 푸시 알림 권한 및 토큰 업데이트 요청
+                        requestPushPermission(myStudentNum);
+
+                        alert(`${myStudentName} 학생, 로그인되었습니다.`);
+                    } else {
+                        alert('비밀번호가 일치하지 않습니다.');
+                    }
+                } else {
+                    alert('등록되지 않은 학번입니다.');
+                }
+            } catch (error) {
+                alert("서버 연결에 실패했습니다.");
+            }
+        }
+
+        function setupStudentProfile() {
+            document.getElementById('student-name').innerText = `${myStudentName} 학생`;
+            document.getElementById('student-num-info').innerText = `${myStudentNum}`;
+            document.getElementById('pw-change-btn').classList.remove('hidden');
+        }
+
+        async function logout() {
+            if (myCallUnsubscribe) myCallUnsubscribe();
+            if (myAppointmentUnsubscribe) myAppointmentUnsubscribe();
+
+            myStudentNum = null;
+            myStudentName = null;
+            myStudentEmail = null;
+
+            document.getElementById('student-name').innerText = "로그인 필요";
+            document.getElementById('student-num-info').innerText = "학번 정보";
+            document.getElementById('pw-change-btn').classList.add('hidden');
+            document.getElementById('call-badge').classList.add('hidden');
+
+            sessionStorage.clear();
+            localStorage.clear();
+
+            window.location.replace(window.location.origin + window.location.pathname);
+        }
+
+        function openPwModal() {
+            document.getElementById('current-pw').value = "";
+            document.getElementById('new-pw').value = "";
+            document.getElementById('new-pw-confirm').value = "";
+            document.getElementById('pw-change-modal').classList.remove('hidden');
+        }
+
+        function closePwModal() {
+            document.getElementById('pw-change-modal').classList.add('hidden');
+        }
+
+        async function submitNewPassword() {
+            const currentPw = document.getElementById('current-pw').value.trim();
+            const newPw = document.getElementById('new-pw').value.trim();
+            const newPwConfirm = document.getElementById('new-pw-confirm').value.trim();
+
+            if (!currentPw || !newPw || !newPwConfirm) {
+                alert("빈칸을 모두 입력해 주세요.");
+                return;
+            }
+
+            if (newPw !== newPwConfirm) {
+                alert("새 비밀번호와 비밀번호 확인 입력값이 일치하지 않습니다.");
+                return;
+            }
+
+            try {
+                const docRef = db.collection('students').doc(myStudentNum);
+                const doc = await docRef.get();
+
+                if (doc.exists) {
+                    const data = doc.data();
+
+                    if (data.password !== currentPw) {
+                        alert("현재 사용 중인 기존 비밀번호가 올바르지 않습니다.");
+                        return;
+                    }
+
+                    await docRef.update({
+                        password: newPw
+                    });
+
+                    alert("비밀번호가 성공적으로 변경되었습니다! 다시 로그인해 주세요.");
+                    closePwModal();
+                    logout();
+                }
+            } catch (err) {
+                alert("변경 오류: " + err.message);
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            const titles = {
+                'booking-tab': '방문 예약 신청',
+                'my-status-tab': '내 신청/호출 현황'
+            };
+            document.getElementById('tab-title').innerText = titles[tabId];
+        }
+
+        async function submitAppointment() {
+            if (!myStudentNum) {
+                alert("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+                return;
+            }
+
+            // 중복 제출 원천 차단
+            if (isSubmittingAppointment) {
+                return;
+            }
+
+            const teacherId = document.getElementById('booking-teacher').value;
+            const time = document.getElementById('booking-time').value;
+            const category = document.getElementById('booking-category').value;
+            const detail = document.getElementById('booking-detail').value.trim();
+
+            if (!teacherId) {
+                alert("선생님을 선택해주세요");
+                return;
+            }
+
+            if (!detail) {
+                alert("구체적인 예약 상담 사유를 적어주세요.");
+                return;
+            }
+
+            try {
+                // 전송 시작 시 플래그 락(Lock) 설정 및 버튼 비활성화
+                isSubmittingAppointment = true;
+                const submitBtn = document.getElementById('btn-submit-appointment');
+                if (submitBtn) submitBtn.disabled = true;
+
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text: detail })
+                });
+
+                const predResult = await response.json();
+
+                if (predResult.status === 'success' && predResult.result === 0) {
+                    alert("⚠️ 입력하신 상담 내용에 불필요하거나 비속어로 오인될 수 있는 표현이 감지되었습니다. 내용을 수정하여 다시 작성해 주세요.");
+                    // 중복 방지 락 해제
+                    isSubmittingAppointment = false;
+                    if (submitBtn) submitBtn.disabled = false;
+                    return;
+                }
+
+                const appointmentData = {
+                    studentNum: myStudentNum || "",
+                    studentName: myStudentName || "이름 없음",
+                    studentEmail: myStudentEmail || "이메일 없음",
+                    teacherId: teacherId,
+                    time: time,
+                    category: category,
+                    detail: detail,
+                    status: '대기',
+                    feedback: '',
+                    studentChecked: false,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                await db.collection('appointments').add(appointmentData);
+
+                alert(`${teacherId} 선생님께 방문 예약 신청을 완료했습니다.`);
+                document.getElementById('booking-detail').value = "";
+                switchTab('my-status-tab');
+            } catch (err) {
+                alert("오류 발생: " + err.message);
+            } finally {
+                // 성공하든 실패하든 전송 완료 후 최종 락 해제
+                isSubmittingAppointment = false;
+                const submitBtn = document.getElementById('btn-submit-appointment');
+                if (submitBtn) submitBtn.disabled = false;
+            }
+        }
+
+        function listenToMyCalls() {
+            if (!myStudentNum) return;
+
+            myCallUnsubscribe = db.collection('calls')
+                .where('studentNum', '==', myStudentNum)
+                .onSnapshot(snapshot => {
+                    const tbody = document.getElementById('my-call-list');
+                    tbody.innerHTML = '';
+
+                    let unconfirmedCount = 0;
+
+                    if (snapshot.empty) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400">나를 호출한 호출 내역이 없습니다.</td></tr>';
+                        updateBadge(0);
+                        prevUnconfirmedCount = 0;
+                        return;
+                    }
+
+                    let lastTeacherName = "";
+                    let lastPeriod = "";
+
+                    snapshot.forEach(doc => {
+                        const d = doc.data();
+                        const isConfirmed = d.status === '확인 완료';
+
+                        // '대기 중' 상태인 호출을 정확히 카운트하여 배지에 반영
+                        if (!isConfirmed && d.status === '대기 중') {
+                            unconfirmedCount++;
+                            lastTeacherName = d.teacherName;
+                            lastPeriod = d.period;
+                        }
+
+                        let actionBtn = "";
+                        if (!isConfirmed) {
+                            actionBtn = `
+                                <button onclick="confirmCall('${doc.id}', '${d.teacherName}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded transition shadow-sm font-bold">
+                                    확인 서명 ✍️
+                                </button>
+                            `;
+                        } else {
+                            actionBtn = `<span class="text-green-600 font-bold text-xs bg-green-50 px-2 py-1 rounded">확인 서명됨 ✅</span>`;
+                        }
+
+                        const timeAndMemo = d.memo ? `${d.period} <br><span class="text-xs text-gray-500 font-normal">📝 메모: ${d.memo}</span>` : d.period;
+
+                        // 호출 등록 일시 데이터 추출
+                        const regDateTime = formatFirebaseTimestamp(d.timestamp);
+
+                        tbody.innerHTML += `
+                            <tr class="text-sm border-b hover:bg-gray-50">
+                                <td class="p-3 font-bold text-slate-800">${d.teacherName} 선생님</td>
+                                <td class="p-3 font-semibold text-indigo-700">${timeAndMemo}</td>
+                                <td class="p-3 text-xs text-slate-500 font-medium">${regDateTime}</td>
+                                <td class="p-3 text-xs font-mono">${d.status}</td>
+                                <td class="p-3 text-center">${actionBtn}</td>
+                            </tr>
+                        `;
+                    });
+
+                    updateBadge(unconfirmedCount);
+
+                    if (unconfirmedCount > prevUnconfirmedCount) {
+                        playNotificationSound();
+                        if (window.Notification && Notification.permission === "granted") {
+                            new Notification("🔔 스마트 교무실 알림", {
+                                body: `${lastTeacherName} 선생님이 부르십니다: "${lastPeriod}"`
+                            });
+                        }
+                    }
+                    prevUnconfirmedCount = unconfirmedCount;
+
+                }, error => {
+                    console.error("호출 수신 실패:", error);
+                });
+        }
+
+        function updateBadge(count) {
+            const badgeEl = document.getElementById('call-badge');
+            if (count > 0) {
+                badgeEl.innerText = count;
+                badgeEl.classList.remove('hidden');
+            } else {
+                badgeEl.classList.add('hidden');
+            }
+        }
+
+        function listenToMyAppointments() {
+            if (!myStudentNum) return;
+
+            myAppointmentUnsubscribe = db.collection('appointments')
+                .where('studentNum', '==', myStudentNum)
+                .onSnapshot(snapshot => {
+                    const tbody = document.getElementById('my-appointment-list');
+                    tbody.innerHTML = '';
+
+                    if (snapshot.empty) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400">접수된 예약 리스트가 없습니다.</td></tr>';
+                        return;
+                    }
+
+                    snapshot.forEach(doc => {
+                        const d = doc.data();
+                        const appId = doc.id;
+                        const currentStatus = d.status;
+
+                        if (lastKnownStatusMap[appId] !== undefined && lastKnownStatusMap[appId] === '대기' && currentStatus !== '대기') {
+                            playNotificationSound();
+                            if (window.Notification && Notification.permission === "granted") {
+                                new Notification("📅 예약 상태 업데이트", {
+                                    body: `${d.teacherId} 선생님이 신청하신 예약을 [${currentStatus}] 처리하셨습니다!`
+                                });
+                            }
+                            alert(`📅 ${d.teacherId} 선생님이 예약을 [${currentStatus}] 처리하셨습니다!\n메모: ${d.feedback || "없음"}`);
+                        }
+
+                        lastKnownStatusMap[appId] = currentStatus;
+
+                        let statusBadge = '';
+                        if (currentStatus === '대기') {
+                            statusBadge = `<span class="bg-gray-100 text-gray-800 px-2.5 py-1 rounded-full text-xs font-semibold animate-pulse">대기 중</span>`;
+                        } else if (currentStatus === '수락') {
+                            statusBadge = `<span class="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full text-xs font-bold">승인 완료 🎉</span>`;
+                        } else {
+                            statusBadge = `<span class="bg-rose-100 text-rose-800 px-2.5 py-1 rounded-full text-xs font-bold">반려(거절)</span>`;
+                        }
+
+                        // 예약 신청 등록 일시 추출
+                        const appDateTime = formatFirebaseTimestamp(d.timestamp);
+
+                        tbody.innerHTML += `
+                            <tr class="text-sm border-b hover:bg-gray-50">
+                                <td class="p-3 font-bold text-slate-800">${d.teacherId} 선생님</td>
+                                <td class="p-3 font-semibold text-indigo-700">${d.time}</td>
+                                <td class="p-3 text-xs text-slate-500 font-medium">${appDateTime}</td>
+                                <td class="p-3">${statusBadge}</td>
+                                <td class="p-3 text-gray-600 text-xs whitespace-pre-wrap">${d.feedback || '선생님의 확인 대기 중...'}</td>
+                            </tr>
+                        `;
+                    });
+                }, error => {
+                    console.error("예약 현황 수신 실패:", error);
+                });
+        }
+
+        async function confirmCall(callId, teacherName) {
+            try {
+                await db.collection('calls').doc(callId).update({
+                    status: '확인 완료'
+                });
+                alert(`${teacherName} 선생님의 호출 확인 서명을 완료하였습니다. 안전하게 교무실을 방문해 주세요!`);
+            } catch (err) {
+                alert("확인 처리 중 오류가 발생했습니다.");
+            }
+        }
+    </script>
+</body>
+</html>
