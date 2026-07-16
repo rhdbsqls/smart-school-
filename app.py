@@ -1,14 +1,46 @@
 import os
+import zipfile
+import gdown
 import torch
 from flask import Flask, render_template, request, jsonify
 from transformers import ElectraForSequenceClassification, ElectraTokenizer
+
+# ==========================================================
+# 📥 구글 드라이브에서 KoElectra 모델 자동 다운로드 및 압축 해제
+# ==========================================================
+MODEL_PATH = "./koelectra_model"
+
+# 모델 폴더가 없는 경우에만 구글 드라이브에서 다운로드 및 압축 해제 실행
+if not os.path.exists(MODEL_PATH):
+    print("📢 [모델 감지] 로컬 모델 폴더가 존재하지 않아 구글 드라이브에서 다운로드를 시작합니다...")
+
+    file_id = '1M4rnWBmhZwSTCN7rZP5-4k2TU1TZnoOm'
+    url = f'https://drive.google.com/uc?id={file_id}'
+    output = 'koelectra_model.zip'
+
+    try:
+        # 구글 드라이브 대용량 파일 다운로드 (gdown 활용)
+        gdown.download(url, output, quiet=False, remaining_ok=True)
+
+        # 다운로드받은 zip 파일 압축 해제
+        print("📦 다운로드 완료. 압축을 해제합니다...")
+        with zipfile.ZipFile(output, 'r') as zip_ref:
+            # zip 안에 'koelectra_model' 폴더가 포함되어 있는지 확인 후 압축 해제 경로 지정
+            zip_ref.extractall(".")
+
+            # 압축 해제 후 다운로드받은 원본 zip 파일은 서버 용량 확보를 위해 삭제
+        os.remove(output)
+        print("✅ 모델 다운로드 및 압축 해제가 완료되었습니다!")
+
+    except Exception as e:
+        print(f"❌ 모델 자동 다운로드 중 오류 발생: {e}")
+        print("⚠️ 수동 다운로드나 구글 드라이브 링크 및 권한(링크가 있는 모든 사용자 공개)을 다시 확인해 주세요.")
 
 app = Flask(__name__)
 
 # ==========================================================
 # 🧠 KoElectra 모델 로드 설정 (실제 모델 폴더명과 맞추어 설정)
 # ==========================================================
-MODEL_PATH = "./koelectra_model"
 
 try:
     tokenizer = ElectraTokenizer.from_pretrained(MODEL_PATH)
@@ -72,10 +104,11 @@ def predict():
 
 from flask import send_from_directory
 
+
 @app.route('/firebase-messaging-sw.js')
 def serve_service_worker():
     return send_from_directory('.', 'firebase-messaging-sw.js', mimetype='application/javascript')
 
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5003, debug=True)
-
